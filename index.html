@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3-Way Switch Simulator</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: #f8f9fa;
+            padding: 15px;
+            box-sizing: border-box;
+        }
+        #container {
+            background: white;
+            padding: 25px;
+            border-radius: 18px;
+            box-shadow: 0 10px 70px rgba(0,0,0,0.15);
+            max-width: 380px;
+            width: 100%;
+        }
+        h2 { text-align: center; margin: 0 0 25px; color: #333; font-size: 1.5em; }
+
+        .switch-box {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #444;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 80px;
+            height: 46px;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 46px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 38px;
+            width: 38px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #2196F3; }
+        input:checked + .slider:before { transform: translateX(34px); }
+
+        /* Wider, more spacious wiring diagram */
+        .wiring {
+            margin: 40px 0;
+            position: relative;
+            height: 240px;
+            background: #f5f5f5;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        svg { width: 100%; height: 100%; }
+
+        /* Light */
+        #light {
+            font-size: 70px;
+            text-align: center;
+            margin: 25px 0;
+            transition: all 0.4s;
+        }
+        #light.off  { color: #bbb; filter: brightness(0.3); }
+        #light.on   { color: #ffd700; filter: drop-shadow(0 0 25px #ffeb3b); }
+
+        .status {
+            text-align: center;
+            font-size: 1.2em;
+            color: #555;
+            margin-bottom: 10px;
+        }
+
+        /* Remove the annoying mobile spin-button/wheel that appears on some devices */
+        input[type=checkbox] {
+            -webkit-appearance: none;
+            appearance: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h2>3-Way Light Switch Simulator</h2>
+
+        <div class="switch-box">
+            <span class="label">Switch A</span>
+            <label class="switch">
+                <input type="checkbox" id="switch1">
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <div class="wiring">
+            <svg viewBox="0 0 380 240" xmlns="http://www.w3.org/2000/svg">
+                <!-- Power & travelers – now nicely spaced -->
+                <line x1="50" y1="50"  x2="110" y2="50"  stroke="#000" stroke-width="5"/> <!-- Hot from power -->
+                <line x1="110" y1="35" x2="270" y2="35" stroke="#d32f2f" stroke-width="5"/> <!-- Red traveler -->
+                <line x1="110" y1="65" x2="270" y2="65" stroke="#1976d2" stroke-width="5"/> <!-- Black/blue traveler -->
+                <line x1="270" y1="50" x2="330" y2="50" stroke="#000" stroke-width="5"/> <!-- Switched hot to light -->
+
+                <!-- Switch contacts -->
+                <circle cx="110" cy="35" r="9" fill="#d32f2f"/>
+                <circle cx="110" cy="65" r="9" fill="#1976d2"/>
+                <circle cx="110" cy="50" r="9" fill="#000"/>
+
+                <circle cx="270" cy="35" r="9" fill="#d32f2f"/>
+                <circle cx="270" cy="65" r="9" fill="#1976d2"/>
+                <circle cx="270" cy="50" r="9" fill="#000"/>
+
+                <!-- Dynamic connections -->
+                <line id="connA1" x1="110" y1="50" x2="110" y2="35" stroke="#000" stroke-width="5"/>
+                <line id="connA2" x1="110" y1="50" x2="110" y2="65" stroke="#000" stroke-width="5"/>
+                <line id="connB1" x1="270" y1="50" x2="270" y2="35" stroke="#000" stroke-width="5"/>
+                <line id="connB2" x1="270" y1="50" x2="270" y2="65" stroke="#000" stroke-width="5"/>
+
+                <!-- Light bulb -->
+                <circle cx="330" cy="120" r="35" fill="none" stroke="#666" stroke-width="4"/>
+                <path d="M330 85 L330 155 M295 105 L365 135 M365 105 L295 135" stroke="#666" stroke-width="4"/>
+                <text x="330" y="195" text-anchor="middle" font-size="16" fill="#444">Light</text>
+
+                <!-- Labels -->
+                <text x="60" y="45" font-size="14" fill="#000">Power</text>
+                <text x="190" y="25" font-size="13" fill="#d32f2f">Traveler (red)</text>
+                <text x="190" y="90" font-size="13" fill="#1976d2">Traveler (black/blue)</text>
+            </svg>
+        </div>
+
+        <div id="light" class="off">Light bulb</div>
+        <div class="status">Light is <strong>OFF</strong></div>
+
+        <div class="switch-box">
+            <span class="label">Switch B</span>
+            <label class="switch">
+                <input type="checkbox" id="switch2">
+                <span class="slider"></span>
+            </label>
+        </div>
+    </div>
+
+    <script>
+        const s1 = document.getElementById('switch1');
+        const s2 = document.getElementById('switch2');
+        const light = document.getElementById('light');
+        const status = document.querySelector('.status strong');
+
+        const connA1 = document.getElementById('connA1');
+        const connA2 = document.getElementById('connA2');
+        const connB1 = document.getElementById('connB1');
+        const connB2 = document.getElementById('connB2');
+
+        function updateEverything() {
+            const aUp = s1.checked;
+            const bUp = s2.checked;
+
+            // Switch A connections
+            connA1.setAttribute('stroke', aUp ? '#d32f2f' : '#000');
+            connA2.setAttribute('stroke', aUp ? '#000' : '#1976d2');
+
+            // Switch B connections
+            connB1.setAttribute('stroke', bUp ? '#d32f2f' : '#000');
+            connB2.setAttribute('stroke', bUp ? '#000' : '#1976d2');
+
+            // Light state
+            const isOn = aUp !== bUp;
+            light.className = isOn ? 'on' : 'off';
+            status.textContent = isOn ? 'ON' : 'OFF';
+        }
+
+        s1.addEventListener('change', updateEverything);
+        s2.addEventListener('change', updateEverything);
+        updateEverything();
+    </script>
+</body>
+</html>
