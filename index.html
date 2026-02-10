@@ -1,200 +1,181 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3-Way Switch Simulator</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            background: #f8f9fa;
-            padding: 15px;
-            box-sizing: border-box;
-        }
-        #container {
-            background: white;
-            padding: 25px;
-            border-radius: 18px;
-            box-shadow: 0 10px 70px rgba(0,0,0,0.15);
-            max-width: 380px;
-            width: 100%;
-        }
-        h2 { text-align: center; margin: 0 0 25px; color: #333; font-size: 1.5em; }
-
-        .switch-box {
-            text-align: center;
-            margin: 20px 0;
-        }
-        .label {
-            display: block;
-            margin-bottom: 10px;
-            font-weight: bold;
-            color: #444;
-        }
-        .switch {
-            position: relative;
-            display: inline-block;
-            width: 80px;
-            height: 46px;
-        }
-        .switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-        .slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: #ccc;
-            transition: .4s;
-            border-radius: 46px;
-        }
-        .slider:before {
-            position: absolute;
-            content: "";
-            height: 38px;
-            width: 38px;
-            left: 4px;
-            bottom: 4px;
-            background-color: white;
-            transition: .4s;
-            border-radius: 50%;
-        }
-        input:checked + .slider { background-color: #2196F3; }
-        input:checked + .slider:before { transform: translateX(34px); }
-
-        /* Wider, more spacious wiring diagram */
-        .wiring {
-            margin: 40px 0;
-            position: relative;
-            height: 240px;
-            background: #f5f5f5;
-            border-radius: 12px;
-            overflow: hidden;
-        }
-        svg { width: 100%; height: 100%; }
-
-        /* Light */
-        #light {
-            font-size: 70px;
-            text-align: center;
-            margin: 25px 0;
-            transition: all 0.4s;
-        }
-        #light.off  { color: #bbb; filter: brightness(0.3); }
-        #light.on   { color: #ffd700; filter: drop-shadow(0 0 25px #ffeb3b); }
-
-        .status {
-            text-align: center;
-            font-size: 1.2em;
-            color: #555;
-            margin-bottom: 10px;
-        }
-
-        /* Remove the annoying mobile spin-button/wheel that appears on some devices */
-        input[type=checkbox] {
-            -webkit-appearance: none;
-            appearance: none;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>S3 Heater Control PWA</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f4f4f4; }
+    .hidden { display: none; }
+    #status { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; background: white; border-radius: 8px; }
+    button { margin: 10px 0; padding: 12px 20px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; }
+    button.start { background: #4CAF50; color: white; }
+    button.stop { background: #f44336; color: white; }
+    form { margin-top: 20px; background: white; padding: 15px; border-radius: 8px; border: 1px solid #ddd; }
+    input, select { margin: 8px 0; padding: 8px; width: 100%; box-sizing: border-box; }
+    label { display: block; margin-top: 12px; font-weight: bold; }
+  </style>
+  <link rel="manifest" href="/manifest.json">
 </head>
 <body>
-    <div id="container">
-        <h2>3-Way Light Switch Simulator</h2>
+  <div id="login" class="hidden">
+    <h1>Login to Heater Control</h1>
+    <input type="text" id="username" placeholder="Username">
+    <input type="password" id="password" placeholder="Password">
+    <button onclick="login()">Login</button>
+    <p>Need an account? <button onclick="register()">Register</button></p>
+  </div>
 
-        <div class="switch-box">
-            <span class="label">Switch A</span>
-            <label class="switch">
-                <input type="checkbox" id="switch1">
-                <span class="slider"></span>
-            </label>
-        </div>
-
-        <div class="wiring">
-            <svg viewBox="0 0 380 240" xmlns="http://www.w3.org/2000/svg">
-                <!-- Power & travelers – now nicely spaced -->
-                <line x1="50" y1="50"  x2="110" y2="50"  stroke="#000" stroke-width="5"/> <!-- Hot from power -->
-                <line x1="110" y1="35" x2="270" y2="35" stroke="#d32f2f" stroke-width="5"/> <!-- Red traveler -->
-                <line x1="110" y1="65" x2="270" y2="65" stroke="#1976d2" stroke-width="5"/> <!-- Black/blue traveler -->
-                <line x1="270" y1="50" x2="330" y2="50" stroke="#000" stroke-width="5"/> <!-- Switched hot to light -->
-
-                <!-- Switch contacts -->
-                <circle cx="110" cy="35" r="9" fill="#d32f2f"/>
-                <circle cx="110" cy="65" r="9" fill="#1976d2"/>
-                <circle cx="110" cy="50" r="9" fill="#000"/>
-
-                <circle cx="270" cy="35" r="9" fill="#d32f2f"/>
-                <circle cx="270" cy="65" r="9" fill="#1976d2"/>
-                <circle cx="270" cy="50" r="9" fill="#000"/>
-
-                <!-- Dynamic connections -->
-                <line id="connA1" x1="110" y1="50" x2="110" y2="35" stroke="#000" stroke-width="5"/>
-                <line id="connA2" x1="110" y1="50" x2="110" y2="65" stroke="#000" stroke-width="5"/>
-                <line id="connB1" x1="270" y1="50" x2="270" y2="35" stroke="#000" stroke-width="5"/>
-                <line id="connB2" x1="270" y1="50" x2="270" y2="65" stroke="#000" stroke-width="5"/>
-
-                <!-- Light bulb -->
-                <circle cx="330" cy="120" r="35" fill="none" stroke="#666" stroke-width="4"/>
-                <path d="M330 85 L330 155 M295 105 L365 135 M365 105 L295 135" stroke="#666" stroke-width="4"/>
-                <text x="330" y="195" text-anchor="middle" font-size="16" fill="#444">Light</text>
-
-                <!-- Labels -->
-                <text x="60" y="45" font-size="14" fill="#000">Power</text>
-                <text x="190" y="25" font-size="13" fill="#d32f2f">Traveler (red)</text>
-                <text x="190" y="90" font-size="13" fill="#1976d2">Traveler (black/blue)</text>
-            </svg>
-        </div>
-
-        <div id="light" class="off">Light bulb</div>
-        <div class="status">Light is <strong>OFF</strong></div>
-
-        <div class="switch-box">
-            <span class="label">Switch B</span>
-            <label class="switch">
-                <input type="checkbox" id="switch2">
-                <span class="slider"></span>
-            </label>
-        </div>
+  <div id="main" class="hidden">
+    <h1>S3 Heater Control</h1>
+    <div id="status">
+      <strong>Battery Temp:</strong> <span id="battery_temp">Loading...</span> °C<br>
+      <strong>Fuel Tank:</strong> <span id="fuel_percent">Loading...</span> %<br>
+      <strong>Heater:</strong> <span id="heater_status">Loading...</span><br>
+      <strong>Charging:</strong> <span id="charging">Loading...</span>
     </div>
 
-    <script>
-        const s1 = document.getElementById('switch1');
-        const s2 = document.getElementById('switch2');
-        const light = document.getElementById('light');
-        const status = document.querySelector('.status strong');
+    <button class="start" onclick="startCycle()">Start Heating Cycle</button>
+    <button class="stop" onclick="stopCycle()">Stop Heating Cycle</button>
 
-        const connA1 = document.getElementById('connA1');
-        const connA2 = document.getElementById('connA2');
-        const connB1 = document.getElementById('connB1');
-        const connB2 = document.getElementById('connB2');
+    <h2>Scheduling & Settings</h2>
+    <form id="configForm">
+      <label>Low Battery Threshold (°C):</label>
+      <input type="number" name="battery_low_threshold" value="15">
 
-        function updateEverything() {
-            const aUp = s1.checked;
-            const bUp = s2.checked;
+      <label>High Battery Threshold (°C):</label>
+      <input type="number" name="battery_high_threshold" value="25">
 
-            // Switch A connections
-            connA1.setAttribute('stroke', aUp ? '#d32f2f' : '#000');
-            connA2.setAttribute('stroke', aUp ? '#000' : '#1976d2');
+      <label>Departure Time:</label>
+      <input type="time" name="departure_time" value="07:30">
 
-            // Switch B connections
-            connB1.setAttribute('stroke', bUp ? '#d32f2f' : '#000');
-            connB2.setAttribute('stroke', bUp ? '#000' : '#1976d2');
+      <label>Maintain Battery Temp All Night:</label>
+      <input type="checkbox" name="maintain_all_night" checked>
 
-            // Light state
-            const isOn = aUp !== bUp;
-            light.className = isOn ? 'on' : 'off';
-            status.textContent = isOn ? 'ON' : 'OFF';
-        }
+      <label>Tesla API Key (if needed):</label>
+      <input type="text" name="api_key" placeholder="Enter your Tesla API key">
 
-        s1.addEventListener('change', updateEverything);
-        s2.addEventListener('change', updateEverything);
-        updateEverything();
-    </script>
+      <button type="button" onclick="saveConfig()">Save Settings</button>
+    </form>
+  </div>
+
+  <script>
+    const API_URL = 'http://192.168.1.100:5000';  // Replace with your Pi's IP (or domain later)
+
+    // Show login or main screen
+    function showLogin() { document.getElementById('login').style.display = 'block'; }
+    function showMain() { document.getElementById('main').style.display = 'block'; loadConfig(); updateStatus(); setInterval(updateStatus, 30000); }
+
+    // Basic auth helper
+    function getAuthHeader() {
+      const auth = localStorage.getItem('auth');
+      return auth ? { 'Authorization': 'Basic ' + auth } : {};
+    }
+
+    function login() {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value.trim();
+      if (!username || !password) return alert('Enter credentials');
+      localStorage.setItem('auth', btoa(username + ':' + password));
+      fetch(API_URL + '/status', { headers: getAuthHeader() })
+        .then(res => { if (res.ok) showMain(); else alert('Login failed'); })
+        .catch(() => alert('Connection error'));
+    }
+
+    function register() {
+      const username = prompt('New Username:');
+      const password = prompt('New Password:');
+      if (!username || !password) return;
+      fetch(API_URL + '/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      })
+        .then(res => res.json())
+        .then(data => alert(data.status))
+        .catch(() => alert('Registration failed'));
+    }
+
+    function updateStatus() {
+      fetch(API_URL + '/status', { headers: getAuthHeader() })
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById('battery_temp').innerText = data.battery_temp || 'N/A';
+          document.getElementById('fuel_percent').innerText = data.fuel || 'N/A';
+          document.getElementById('heater_status').innerText = data.heater || 'Off';
+          document.getElementById('charging').innerText = data.charging || 'N/A';
+        })
+        .catch(err => console.error('Status update failed:', err));
+    }
+
+    function startCycle() {
+      fetch(API_URL + '/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+        body: JSON.stringify({ cmd: 'start', level: 'medium' })
+      })
+        .then(() => alert('Heating cycle started: Coolant loop + S3'))
+        .catch(() => alert('Failed to start'));
+    }
+
+    function stopCycle() {
+      fetch(API_URL + '/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+        body: JSON.stringify({ cmd: 'stop' })
+      })
+        .then(() => alert('Heating cycle stopped: S3 off, loop running 15 min'))
+        .catch(() => alert('Failed to stop'));
+    }
+
+    function loadConfig() {
+      fetch(API_URL + '/config', { headers: getAuthHeader() })
+        .then(res => res.json())
+        .then(data => {
+          document.querySelector('[name=battery_low_threshold]').value = data.battery_low_threshold || 15;
+          document.querySelector('[name=battery_high_threshold]').value = data.battery_high_threshold || 25;
+          document.querySelector('[name=departure_time]').value = data.departure_time || '07:30';
+          document.querySelector('[name=maintain_all_night]').checked = data.maintain_all_night !== false;
+        });
+    }
+
+    function saveConfig() {
+      const form = document.getElementById('configForm');
+      const data = {
+        battery_low_threshold: parseInt(form.battery_low_threshold.value) || 15,
+        battery_high_threshold: parseInt(form.battery_high_threshold.value) || 25,
+        departure_time: form.departure_time.value || '07:30',
+        maintain_all_night: form.maintain_all_night.checked,
+        api_key: form.api_key.value.trim() || undefined
+      };
+      fetch(API_URL + '/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+        body: JSON.stringify(data)
+      })
+        .then(res => res.json())
+        .then(() => alert('Settings saved'))
+        .catch(() => alert('Failed to save'));
+    }
+
+    // Initial load
+    if (localStorage.getItem('auth')) {
+      showMain();
+    } else {
+      showLogin();
+    }
+  </script>
+
+  <!-- Manifest for PWA installability -->
+  <script type="application/json" src="manifest.json">
+    {
+      "name": "S3 Heater Control",
+      "short_name": "Heater Ctrl",
+      "start_url": "/",
+      "display": "standalone",
+      "background_color": "#fff",
+      "theme_color": "#4CAF50"
+    }
+  </script>
 </body>
 </html>
