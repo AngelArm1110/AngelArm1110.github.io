@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Tesla Heater Control</title>
+  <meta name="theme-color" content="#ffffff"/>
+  <link rel="manifest" href="data:application/manifest+json,{
+    'name':'Heater Control','short_name':'Heater','start_url':'./','display':'standalone',
+    'background_color':'#ffffff','theme_color':'#000000','icons':[{'src':'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔥</text></svg>','sizes':'192x192','type':'image/svg+xml'}]
+  }"/>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    :root { --bg: white; --text: black; --gray: #f0f0f0; --input-bg: white; --input-text: black; }
+    [data-theme="dark"] { --bg: black; --text: white; --gray: #222; --input-bg: #333; --input-text: white; }
+    body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); min-height:100vh; padding:1rem; }
+    h1, h2 { text-align:center; }
+    .status { background:var(--gray); padding:1rem; border-radius:12px; margin:1rem 0; }
+    .buttons { display:flex; justify-content:center; gap:2rem; margin:2rem 0; }
+    .big-btn { width:140px; height:140px; border-radius:50%; color:white; font-weight:bold; font-size:1.3rem; border:none; box-shadow:0 4px 10px rgba(0,0,0,0.3); transition:all 0.3s; cursor:pointer; }
+    .active { box-shadow:0 0 25px lime !important; border:5px solid lime !important; }
+    .thresholds.disabled { opacity:0.5; pointer-events:none; }
+    input[type=number], input[type=text] { width:100%; padding:0.5rem; margin-top:0.3rem; border-radius:6px; border:1px solid #ccc; background:var(--input-bg); color:var(--input-text); }
+    .theme-toggle { background:#6b46c1; color:white; }
+    .logout { background:#718096; color:white; }
+    #mqtt-status { text-align:center; font-weight:bold; margin:1rem 0; }
+    #broker-url { width:80%; padding:0.5rem; }
+  </style>
+</head>
+<body data-theme="light">
+
+  <h1>Heater Control</h1>
+
+  <div id="mqtt-status" style="color:#ef4444;">MQTT: Disconnected</div>
+
+  <div style="text-align:center; margin-bottom:1rem;">
+    <input type="text" id="broker-url" placeholder="ws://192.168.1.xxx:9001/mqtt" value="ws://localhost:9001/mqtt"/>
+    <button id="connect-btn">Connect MQTT</button>
+  </div>
+
+  <div style="text-align:center; font-size:1.4rem; font-weight:bold; margin:1rem 0;">
+    Connection: <span id="conn">TEST</span>
+  </div>
+
+  <div class="status">
+    <p>Battery Temp: <span id="batt-temp">-5</span>°C</p>
+    <p>Cabin Temp: <span id="cabin-temp">-10</span>°C</p>
+    <p>Charger: <span id="charger">Inactive</span></p>
+    <p>Heater: <span id="heater">Inactive</span></p>
+    <p>Fuel: <span id="fuel">75</span>%</p>
+    <p>Aux Battery: <span id="aux-volt">12.6</span>V</p>
+  </div>
+
+  <div style="text-align:center;">
+    <img id="car-img" style="max-height:180px; display:block; margin:0 auto;" src="" alt="Your Tesla"/>
+    <label style="display:block; margin-top:0.5rem; cursor:pointer;">
+      Upload Tesla photo
+      <input type="file" accept="image/*" id="img-upload" style="display:none;"/>
+    </label>
+  </div>
+
+  <div class="buttons">
+    <button id="cabin-btn" class="big-btn" style="background:linear-gradient(to bottom right, #60a5fa, #3b82f6);">Heat Cabin</button>
+    <button id="batt-btn"   class="big-btn" style="background:linear-gradient(to bottom right, #60a5fa, #3b82f6);">Heat Battery</button>
+  </div>
+
+  <div style="margin:2rem 0;">
+    <label style="display:flex; align-items:center; gap:0.8rem; font-size:1.1rem;">
+      <input type="checkbox" id="maintain" checked/>
+      Maintain Battery Temp All Night
+    </label>
+
+    <div id="thresholds" class="thresholds">
+      <label>Low Threshold (°C):
+        <input type="number" id="low-th" value="15" min="0" max="40"/>
+      </label>
+      <label style="margin-top:1rem;">High Threshold (°C):
+        <input type="number" id="high-th" value="25" min="0" max="40"/>
+      </label>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:2rem;">
+    <button id="api-btn" style="padding:1rem; background:#3b82f6; color:white; border:none; border-radius:8px; font-size:1.1rem;">API Key</button>
+    <button id="sched-btn" style="padding:1rem; background:#10b981; color:white; border:none; border-radius:8px; font-size:1.1rem;">Schedule</button>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:1rem;">
+    <button id="theme-btn" class="theme-toggle" style="padding:1rem; border:none; border-radius:8px; font-size:1.1rem;">Night Mode</button>
+    <button id="logout" class="logout" style="padding:1rem; border:none; border-radius:8px; font-size:1.1rem;">Logout</button>
+  </div>
+
+  <script>
+    let client = null;
+    let isSimMode = true; // fallback if MQTT fails
+
+    const brokerInput = document.getElementById('broker-url');
+    const connectBtn = document.getElementById('connect-btn');
+    const mqttStatus = document.getElementById('mqtt-status');
+
+    // Theme
+    const themeBtn = document.getElementById('theme-btn');
+    themeBtn.onclick = () => {
+      const isDark = document.body.dataset.theme === 'dark';
+      document.body.dataset.theme = isDark ? 'light' : 'dark';
+      themeBtn.textContent = isDark ? 'Night Mode' : 'Day Mode';
+      localStorage.setItem('theme', isDark ? 'light' : 'dark');
+    };
+    if (localStorage.getItem('theme') === 'dark') {
+      document.body.dataset.theme = 'dark';
+      themeBtn.textContent = 'Day Mode';
+    }
+
+    // Maintain checkbox
+    const maintainChk = document.getElementById('maintain');
+    const thresholds = document.getElementById('thresholds');
+    maintainChk.onchange = () => {
+      thresholds.classList.toggle('disabled', !maintainChk.checked);
+      if (!isSimMode && client) client.publish('heater/config', JSON.stringify({maintain: maintainChk.checked}));
+    };
+
+    // Temp color gradient
+    function updateButtonColors() {
+      const batt = parseFloat(document.getElementById('batt-temp').textContent) || 0;
+      const cabin = parseFloat(document.getElementById('cabin-temp').textContent) || 0;
+      const getGrad = t => t < 5 ? '#1e40af,#60a5fa' : t < 15 ? '#ca8a04,#fbbf24' : '#b91c1c,#f87171';
+      document.getElementById('cabin-btn').style.background = `linear-gradient(to bottom right, ${getGrad(cabin)})`;
+      document.getElementById('batt-btn').style.background = `linear-gradient(to bottom right, ${getGrad(batt)})`;
+    }
+
+    // MQTT connect
+    connectBtn.onclick = () => {
+      const url = brokerInput.value.trim() || 'ws://localhost:9001/mqtt';
+      mqttStatus.textContent = 'Connecting...';
+      mqttStatus.style.color = '#eab308';
+
+      client = mqtt.connect(url, {
+        reconnectPeriod: 5000,
+        connectTimeout: 10000
+      });
+
+      client.on('connect', () => {
+        mqttStatus.textContent = 'MQTT Connected';
+        mqttStatus.style.color = '#10b981';
+        isSimMode = false;
+        client.subscribe('heater/status');
+        client.subscribe('battery/#'); // aux battery topics
+        // Send initial config
+        client.publish('heater/config', JSON.stringify({
+          maintain: maintainChk.checked,
+          lowThreshold: parseInt(document.getElementById('low-th').value),
+          highThreshold: parseInt(document.getElementById('high-th').value)
+        }));
+      });
+
+      client.on('message', (topic, message) => {
+        const payload = message.toString();
+        try {
+          const data = JSON.parse(payload);
+          if (topic === 'heater/status') {
+            document.getElementById('batt-temp').textContent = data.batteryTemp?.toFixed(1) || '-';
+            document.getElementById('cabin-temp').textContent = data.cabinTemp?.toFixed(1) || '-';
+            document.getElementById('charger').textContent = data.chargerStatus || 'Inactive';
+            document.getElementById('heater').textContent = data.heaterStatus || 'Inactive';
+            document.getElementById('fuel').textContent = data.fuelPercent || '75';
+            document.getElementById('conn').textContent = data.connectionMode || 'WiFi';
+            updateButtonColors();
+          } else if (topic.startsWith('battery/')) {
+            if (topic === 'battery/voltage') {
+              document.getElementById('aux-volt').textContent = payload;
+            }
+          }
+        } catch (e) {
+          console.log('MQTT msg parse error:', e);
+        }
+      });
+
+      client.on('error', err => {
+        mqttStatus.textContent = 'MQTT Error: ' + err.message;
+        mqttStatus.style.color = '#ef4444';
+        isSimMode = true;
+      });
+
+      client.on('close', () => {
+        mqttStatus.textContent = 'MQTT Disconnected';
+        mqttStatus.style.color = '#ef4444';
+        isSimMode = true;
+      });
+    };
+
+    // Button commands
+    document.getElementById('cabin-btn').onclick = () => {
+      if (isSimMode) alert('Heat Cabin (sim mode)');
+      else if (client) client.publish('heater/command', 'heat_cabin');
+    };
+    document.getElementById('batt-btn').onclick = () => {
+      if (isSimMode) alert('Heat Battery (sim mode)');
+      else if (client) client.publish('heater/command', 'heat_battery');
+    };
+
+    // Threshold changes
+    document.getElementById('low-th').onchange = e => {
+      if (!isSimMode && client) client.publish('heater/config', JSON.stringify({lowThreshold: parseInt(e.target.value)}));
+    };
+    document.getElementById('high-th').onchange = e => {
+      if (!isSimMode && client) client.publish('heater/config', JSON.stringify({highThreshold: parseInt(e.target.value)}));
+    };
+
+    // Image upload
+    document.getElementById('img-upload').onchange = e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        document.getElementById('car-img').src = ev.target.result;
+        localStorage.setItem('carImage', ev.target.result);
+      };
+      reader.readAsDataURL(file);
+    };
+    if (localStorage.getItem('carImage')) document.getElementById('car-img').src = localStorage.getItem('carImage');
+
+    // Sim mode fallback updates
+    setInterval(() => {
+      if (isSimMode) {
+        document.getElementById('batt-temp').textContent = (Math.random()*30 - 15).toFixed(1);
+        document.getElementById('cabin-temp').textContent = (Math.random()*30 - 15).toFixed(1);
+        document.getElementById('fuel').textContent = Math.floor(Math.random()*100);
+        updateButtonColors();
+      }
+    }, 8000);
+
+    // Placeholder buttons
+    document.getElementById('api-btn').onclick = () => alert('API Key entry (add form later)');
+    document.getElementById('sched-btn').onclick = () => alert('Schedule departure (add page later)');
+    document.getElementById('logout').onclick = () => location.reload();
+
+    updateButtonColors();
+  </script>
+</body>
+</html>
